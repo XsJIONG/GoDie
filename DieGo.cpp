@@ -5,10 +5,8 @@
 #include <windows.h>
 #include <typeinfo>
 #include <vector>
-#include <thread>
 #define BUFFER 1024
 
-#pragma comment(lib,"WS2_32.lib")
 using namespace std;
 
 const char* CMD_EXIT="exit";
@@ -100,11 +98,11 @@ void sendFile() {
 	cout<<"Done!"<<endl;
 	system("pause>nul");
 }
-void FindIp() {
+DWORD WINAPI FindIp(LPVOID args) {
 	while (chosing) {
 		fill(buf,buf+strlen(buf),'\0');
 		ret=recvfrom(s, buf, sizeof(buf), 0, (sockaddr*)&sin, &len);
-		if (!chosing) return;
+		if (!chosing) return 0;
 		if (ret>0) {
 			buf[ret]='\0';
 			ss=buf;
@@ -120,18 +118,18 @@ void FindIp() {
 			}
 		}
 	}
-	return;
+	return 0;
 }
 bool cmding=false;
 const char* CGUI="Welcome to DieGo Control GUI!\nMade By Xs.JIONG\n\n1 - Cmd\n2 - Send File\n3 - Copy File\n4 - Exit\n5 - Quit\n\nChoose one:";
-void ResultThread() {
+DWORD WINAPI ResultThread(LPVOID args) {
 	char buffer[128];
 	while (cmding) {
 		fill(buffer,buffer+strlen(buffer),'\0');
 		recv(tcp,buffer,128,0);
 		if (strlen(buffer)==0) {
 			cmding=false;
-			return;
+			return 0;
 		}
 		cout<<buffer;
 	}
@@ -143,8 +141,7 @@ void cmdMode() {
 	char buff[5];
 	recv(tcp,buff,5,0);
 	string s;
-	thread t(ResultThread);
-	t.detach();
+	CreateThread(NULL, 0, ResultThread, NULL, 0, 0);
 	char c;
 	getchar();
 	while (cmding) {
@@ -155,6 +152,11 @@ void cmdMode() {
 			c=getchar();
 		}
 		if (s[0]==':'&&s[1]==':') {
+			cmding=false;
+			send(tcp,s.c_str(),s.length(),0);
+			return;
+		}
+		if (s[0]=='e'&&s[1]=='x'&&s[2]=='i'&&s[3]=='t') {
 			cmding=false;
 			send(tcp,s.c_str(),s.length(),0);
 			return;
@@ -187,8 +189,7 @@ void doOne() {
 		exit(1); 
 	}
 	showAll();
-	thread t(FindIp);
-	t.detach();
+	CreateThread(NULL, 0, FindIp, NULL, 0, 0);
 	int i;
 	cin>>i;
 	while (i>all.size()) {

